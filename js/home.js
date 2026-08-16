@@ -1,9 +1,5 @@
 import { supabase, isConfigured, SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabaseClient.js";
 import { generateCode, showError, hideError, mediaKind } from "./util.js";
-// Use the browser ESM build. The generic esm.sh entry can resolve to a Node-oriented
-// implementation, which rejects browser File objects with "source object may only be
-// an instance of Buffer or Readable in this environment".
-import { Upload } from "https://cdn.jsdelivr.net/npm/tus-js-client@4.1.0/+esm";
 
 if (!isConfigured) {
   showError(
@@ -59,7 +55,55 @@ function selectFile(file) {
   createBtn.disabled = false;
 }
 
-createBtn.addEventListener("click", () => {
+/*
+ * Upload directly from the browser with XMLHttpRequest.
+ *
+ * The previous TUS implementation was failing before it even contacted
+ * Supabase because the CDN build of tus-js-client was using a Node-style
+ * source adapter. A browser File is a valid body for XMLHttpRequest, so this
+ * path avoids Buffer/Readable entirely and gives us native upload progress.
+ */
+function uploadFile(file, objectPath) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const url = `${SUPABASE_URL}/storage/v1/object/media/${objectPath}`;
+
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Authorization", `Bearer ${SUPABASE_ANON_KEY}`);
+    xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
+    xhr.setRequestHeader("x-upsert", "false");
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const pct = Math.round((event.loaded / event.total) * 100);
+      progressBar.style.width = `${pct}%`;
+      createBtn.textContent = `Uploading… ${pct}%`;
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+
+      let detail = xhr.responseText || `HTTP ${xhr.status}`;
+      try {
+        const body = JSON.parse(xhr.responseText);
+        detail = body.message || body.error || body.error_description || detail;
+      } catch (_) {
+        // Keep the raw response when it isn't JSON.
+      }
+      reject(new Error(detail));
+    };
+
+    xhr.onerror = () => reject(new Error("Network error while uploading to Supabase Storage."));
+    xhr.onabort = () => reject(new Error("Upload was cancelled."));
+    xhr.send(file);
+  });
+}
+
+createBtn.addEventListener("click", async () => {
   if (!selectedFile) return;
   if (!isConfigured) {
     showError(errorBox, "Add your Supabase URL and anon key in js/supabaseClient.js first — see README.");
@@ -76,76 +120,36 @@ createBtn.addEventListener("click", () => {
   const ext = (selectedFile.name.split(".").pop() || "bin").toLowerCase();
   const path = `${code}.${ext}`;
 
-  const upload = new Upload(selectedFile, {
-    endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
-    retryDelays: [0, 3000, 5000, 10000, 20000],
-    chunkSize: 6 * 1024 * 1024,
-    uploadDataDuringCreation: true,
-    removeFingerprintOnSuccess: true,
-    headers: {
-      authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      apikey: SUPABASE_ANON_KEY,
-      "x-upsert": "false",
-    },
-    metadata: {
-      bucketName: "media",
-      objectName: path,
-      contentType: selectedFile.type || "application/octet-stream",
-      cacheControl: "3600",
-    },
-    onError: (err) => {
-      console.error("Nightcast upload error:", err);
-      showError(
-        errorBox,
-        `Upload failed: ${err.message || err}. Check that the "media" bucket exists, is public, and its file size limit allows this file.`
-      );
-      resetCreateButton();
-    },
-    onProgress: (sent, total) => {
-      const pct = total ? Math.round((sent / total) * 100) : 0;
-      progressBar.style.width = `${pct}%`;
-      createBtn.textContent = `Uploading… ${pct}%`;
-    },
-    onSuccess: async () => {
-      try {
-        const { data: pub } = supabase.storage.from("media").getPublicUrl(path);
-        const { error: dbError } = await supabase.from("rooms").insert({
-          code,
-          media_url: pub.publicUrl,
-          media_type: mediaKind(selectedFile),
-          media_name: selectedFile.name,
-        });
-        if (dbError) throw dbError;
+  try {
+    await uploadFile(selectedFile, path);
 
-        localStorage.setItem(`nightcast_host_${code}`, "1");
-        window.location.href = `room.html?code=${code}`;
-      } catch (err) {
-        console.error(err);
-        showError(
-          errorBox,
-          `File uploaded, but the room couldn't be created: ${err.message || err}. Check that the "rooms" table and its policies exist (see README).`
-        );
-        resetCreateButton();
-      }
-    },
-  });
-
-  upload.findPreviousUploads()
-    .then((previous) => {
-      if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
-      upload.start();
-    })
-    .catch((err) => {
-      console.error("Could not start resumable upload:", err);
-      showError(errorBox, `Could not start upload: ${err.message || err}`);
-      resetCreateButton();
+    const { data: pub } = supabase.storage.from("media").getPublicUrl(path);
+    const { error: dbError } = await supabase.from("rooms").insert({
+      code,
+      media_url: pub.publicUrl,
+      media_type: mediaKind(selectedFile),
+      media_name: selectedFile.name,
     });
+
+    if (dbError) throw dbError;
+
+    localStorage.setItem(`nightcast_host_${code}`, "1");
+    window.location.href = `room.html?code=${code}`;
+  } catch (err) {
+    console.error("Nightcast upload error:", err);
+    showError(
+      errorBox,
+      `Upload failed: ${err.message || err}. Check that the "media" bucket exists, your Storage INSERT policy allows uploads, and the bucket file-size limit allows this file.`
+    );
+    resetCreateButton();
+  }
 });
 
 function resetCreateButton() {
   createBtn.disabled = false;
   createBtn.textContent = "Create room";
   progressWrap.style.display = "none";
+  progressBar.style.width = "0%";
 }
 
 codeInput.addEventListener("input", () => {
@@ -157,11 +161,13 @@ joinBtn.addEventListener("click", async () => {
     showError(errorBox, "Add your Supabase URL and anon key in js/supabaseClient.js first — see README.");
     return;
   }
+
   const code = codeInput.value.trim();
   if (code.length < 4) {
     showError(errorBox, "Enter the room code your friend sent you.");
     return;
   }
+
   hideError(errorBox);
   joinBtn.disabled = true;
   joinBtn.textContent = "Checking…";
@@ -179,6 +185,7 @@ joinBtn.addEventListener("click", async () => {
     showError(errorBox, "No room found with that code.");
     return;
   }
+
   window.location.href = `room.html?code=${code}`;
 });
 
