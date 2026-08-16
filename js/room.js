@@ -1,180 +1,52 @@
-import { supabase, isConfigured } from "./supabaseClient.js";
-import { showError, hideError } from "./util.js";
+import { supabase, isConfigured, SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabaseClient.js";
+import { showError } from "./util.js";
 
-const params = new URLSearchParams(window.location.search);
-const code = (params.get("code") || "").toUpperCase();
+const params=new URLSearchParams(location.search), code=(params.get("code")||"").toUpperCase();
+const $=id=>document.getElementById(id), errorBox=$("errorBox"), roomCodeEl=$("roomCode"), roomNameEl=$("roomName"), videoEl=$("videoEl"), audioStage=$("audioStage"), audioEl=$("audioEl"), vinyl=$("vinyl"), audioName=$("audioName"), guestLock=$("guestLock"), tally=$("tally"), tallyText=$("tallyText"), dots=$("dots"), presenceCount=$("presenceCount"), hostNote=$("hostNote"), messageList=$("messageList"), messageInput=$("messageInput"), sendBtn=$("sendBtn"), recordBtn=$("recordBtn"), voiceStatus=$("voiceStatus"), inviteBtn=$("inviteBtn"), editRoomBtn=$("editRoomBtn"), deleteRoomBtn=$("deleteRoomBtn"), roomActions=$("roomActions"), voiceBtn=$("voiceBtn"), videoCallBtn=$("videoCallBtn"), hangupBtn=$("hangupBtn"), callStatus=$("callStatus"), callGrid=$("callGrid");
+roomCodeEl.textContent=code||"——————";
+if(!code){showError(errorBox,"No room code in the link.");throw new Error("missing code")}
+if(!isConfigured){showError(errorBox,"Nightcast isn't connected to Supabase.");throw new Error("supabase not configured")}
+const ownerEntry=(()=>{try{return JSON.parse(localStorage.getItem("nightcast_owned_rooms")||"[]").find(r=>r.code===code)}catch{return null}})();
+const isHost=!!ownerEntry||localStorage.getItem(`nightcast_host_${code}`)==="1";
+const guestId=crypto.randomUUID(), guestName=localStorage.getItem("nightcast_name")||`Guest ${Math.floor(100+Math.random()*900)}`;
+localStorage.setItem("nightcast_name",guestName);
+let mediaEl=null, room=null, mediaRecorder=null, recordingChunks=[], callStream=null, callMode=null;
+const peers=new Map();
+const channel=supabase.channel(`room:${code}`,{config:{broadcast:{self:false},presence:{key:guestId}}});
 
-const roomCodeEl = document.getElementById("roomCode");
-const copyBtn = document.getElementById("copyBtn");
-const errorBox = document.getElementById("errorBox");
-const stage = document.getElementById("stage");
-const videoEl = document.getElementById("videoEl");
-const audioStage = document.getElementById("audioStage");
-const audioEl = document.getElementById("audioEl");
-const vinyl = document.getElementById("vinyl");
-const audioName = document.getElementById("audioName");
-const guestLock = document.getElementById("guestLock");
-const tally = document.getElementById("tally");
-const tallyText = document.getElementById("tallyText");
-const dotsEl = document.getElementById("dots");
-const presenceCountEl = document.getElementById("presenceCount");
-const hostNote = document.getElementById("hostNote");
+function escapeHtml(v){return String(v??"").replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function setLive(on){tally.classList.toggle("live",on);tallyText.textContent=on?"live":"idle";vinyl.classList.toggle("spin",on)}
+function ownedRooms(){try{return JSON.parse(localStorage.getItem("nightcast_owned_rooms")||"[]")}catch{return[]}}
+function rememberRoomName(name){const list=ownedRooms();const i=list.findIndex(r=>r.code===code);if(i>=0){list[i].name=name;localStorage.setItem("nightcast_owned_rooms",JSON.stringify(list))}}
+async function ownerFetch(method,body){if(!ownerEntry?.ownerToken)throw new Error("Only the room owner can do that.");const res=await fetch(`${SUPABASE_URL}/rest/v1/rooms?code=eq.${encodeURIComponent(code)}`,{method,headers:{apikey:SUPABASE_ANON_KEY,Authorization:`Bearer ${SUPABASE_ANON_KEY}`,"x-nightcast-owner-token":ownerEntry.ownerToken,"Content-Type":"application/json",Prefer:"return=representation"},body:body?JSON.stringify(body):undefined});if(!res.ok)throw new Error(await res.text());return res.json()}
 
-roomCodeEl.textContent = code || "——————";
+inviteBtn.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(location.href);inviteBtn.textContent="Link copied!";setTimeout(()=>inviteBtn.textContent="Invite friends",1500)}catch{prompt("Copy this invite link:",location.href)}});
+editRoomBtn.addEventListener("click",async()=>{const next=prompt("Room name:",room?.name||"");if(next===null)return;const name=next.trim().slice(0,80);if(!name)return;try{await ownerFetch("PATCH",{name});room.name=name;roomNameEl.textContent=name;rememberRoomName(name)}catch(e){showError(errorBox,`Couldn't rename room: ${e.message}`)}});
+deleteRoomBtn.addEventListener("click",async()=>{if(!confirm("Delete this room for everyone?"))return;try{await ownerFetch("DELETE");location.href="index.html"}catch(e){showError(errorBox,`Couldn't delete room: ${e.message}`)}});
 
-if (!code) {
-  showError(errorBox, "No room code in the link.");
-  throw new Error("missing code");
-}
+async function init(){const{data,error}=await supabase.from("rooms").select("*").eq("code",code).maybeSingle();if(error||!data){showError(errorBox,"This room doesn't exist or has been deleted.");return}room=data;roomNameEl.textContent=room.name||"Nightcast Room";if(isHost){hostNote.style.display="block";roomActions.style.display="flex"}stageSetup();await loadMessages();await subscribeRealtime();await channel.subscribe(async status=>{if(status==="SUBSCRIBED")await channel.track({id:guestId,name:guestName,host:isHost,call:false})})}
+function stageSetup(){if(room.media_type==="video"){videoEl.style.display="block";videoEl.src=room.media_url;if(isHost)videoEl.controls=true;mediaEl=videoEl}else{audioStage.style.display="flex";audioEl.src=room.media_url;audioName.textContent=room.media_name||"Now playing";if(isHost)audioEl.controls=true;mediaEl=audioEl}$("stage").style.display="block";if(!isHost){guestLock.style.display="flex";guestLock.addEventListener("click",unlockGuest,{once:true})}else setupHost()}
+async function unlockGuest(){try{await mediaEl.play();mediaEl.pause()}catch{}guestLock.style.display="none";channel.send({type:"broadcast",event:"request-sync",payload:{from:guestId}})}
+function setupHost(){const send=(action,extra={})=>channel.send({type:"broadcast",event:"state",payload:{action,time:mediaEl.currentTime,playing:!mediaEl.paused,...extra}});mediaEl.addEventListener("play",()=>{setLive(true);send("play")});mediaEl.addEventListener("pause",()=>{setLive(false);send("pause")});mediaEl.addEventListener("seeked",()=>send("seek"));setInterval(()=>mediaEl.src&&send("sync"),4000);channel.on("broadcast",{event:"request-sync"},()=>send("sync"))}
+channel.on("presence",{event:"sync"},()=>{const people=Object.values(channel.presenceState()).flat();presenceCount.textContent=`${people.length} here`;dots.innerHTML=people.slice(0,8).map(p=>`<div class="dot" title="${escapeHtml(p.name)}">${escapeHtml((p.name||"?")[0])}</div>`).join("");if(callMode)syncPeers(people.filter(p=>p.id!==guestId&&p.call))});
+channel.on("broadcast",{event:"state"},({payload})=>{if(isHost||!mediaEl||guestLock.style.display!=="none")return;const drift=Math.abs(mediaEl.currentTime-payload.time);if(payload.action==="play"){if(drift>1)mediaEl.currentTime=payload.time;mediaEl.play().catch(()=>{});setLive(true)}else if(payload.action==="pause"){mediaEl.currentTime=payload.time;mediaEl.pause();setLive(false)}else if(payload.action==="seek")mediaEl.currentTime=payload.time;else if(payload.action==="sync"){if(drift>1.5)mediaEl.currentTime=payload.time;if(payload.playing)mediaEl.play().catch(()=>{});else mediaEl.pause();setLive(payload.playing)}});
 
-if (!isConfigured) {
-  showError(errorBox, "Nightcast isn't connected to Supabase yet — open js/supabaseClient.js and paste in your Project URL and anon key (see README).");
-  throw new Error("supabase not configured");
-}
+async function subscribeRealtime(){const{data}=await supabase.from("messages").select("*").eq("room_code",code).order("created_at",{ascending:true});renderMessages(data||[]);channel.on("broadcast",{event:"message"},({payload})=>appendMessage(payload));}
+function renderMessages(rows){messageList.innerHTML="";rows.forEach(appendMessage);scrollMessages()}
+function appendMessage(m){const el=document.createElement("div");el.className=`message ${m.sender_id===guestId?"mine":""}`;el.innerHTML=`<div class="message-meta">${escapeHtml(m.sender_name)} · ${new Date(m.created_at||Date.now()).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</div>${m.kind==="voice"?`<audio controls preload="metadata" src="${escapeHtml(m.media_url)}"></audio>`:`<div class="message-body">${escapeHtml(m.body)}</div>`}`;messageList.appendChild(el);scrollMessages()}
+function scrollMessages(){messageList.scrollTop=messageList.scrollHeight}
+async function sendText(){const body=messageInput.value.trim();if(!body)return;sendBtn.disabled=true;const msg={room_code:code,sender_id:guestId,sender_name:guestName,kind:"text",body};const{data,error}=await supabase.from("messages").insert(msg).select().single();sendBtn.disabled=false;if(error){showError(errorBox,`Message failed: ${error.message}`);return}messageInput.value="";channel.send({type:"broadcast",event:"message",payload:data})}
+sendBtn.addEventListener("click",sendText);messageInput.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendText()}});
+recordBtn.addEventListener("click",async()=>{if(mediaRecorder?.state==="recording"){mediaRecorder.stop();return}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});recordingChunks=[];mediaRecorder=new MediaRecorder(stream);mediaRecorder.ondataavailable=e=>{if(e.data.size)recordingChunks.push(e.data)};mediaRecorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());voiceStatus.textContent="Uploading voice message…";const blob=new Blob(recordingChunks,{type:mediaRecorder.mimeType||"audio/webm"});const ext=(blob.type.split("/")[1]||"webm").split(";")[0];const path=`voice/${code}/${guestId}-${Date.now()}.${ext}`;const{error:upError}=await supabase.storage.from("media").upload(path,blob,{contentType:blob.type,upsert:false});if(upError){voiceStatus.textContent="Upload failed";showError(errorBox,upError.message);return}const{data:pub}=supabase.storage.from("media").getPublicUrl(path);const{data,error}=await supabase.from("messages").insert({room_code:code,sender_id:guestId,sender_name:guestName,kind:"voice",media_url:pub.publicUrl}).select().single();if(error){showError(errorBox,error.message);voiceStatus.textContent="";return}voiceStatus.textContent="Voice message sent";channel.send({type:"broadcast",event:"message",payload:data});setTimeout(()=>voiceStatus.textContent="",1500)};mediaRecorder.start();voiceStatus.textContent="Recording… tap again to stop";recordBtn.textContent="Stop recording"}catch(e){showError(errorBox,"Microphone permission is required for voice messages.")}});
 
-const isHost = localStorage.getItem(`nightcast_host_${code}`) === "1";
-const guestName = "Guest " + Math.floor(100 + Math.random() * 900);
-
-copyBtn.addEventListener("click", async () => {
-  await navigator.clipboard.writeText(window.location.href);
-  copyBtn.textContent = "Copied!";
-  setTimeout(() => (copyBtn.textContent = "Copy link"), 1500);
-});
-
-let mediaEl = null; // whichever element is active
-
-function setLive(isPlaying) {
-  tally.classList.toggle("live", isPlaying);
-  tallyText.textContent = isPlaying ? "playing" : "paused";
-  vinyl.classList.toggle("spin", isPlaying);
-}
-
-async function init() {
-  const { data: room, error } = await supabase
-    .from("rooms")
-    .select("*")
-    .eq("code", code)
-    .maybeSingle();
-
-  if (error || !room) {
-    showError(errorBox, "This room doesn't exist — check the code or ask your friend for a fresh link.");
-    return;
-  }
-
-  stage.style.display = "block";
-
-  if (room.media_type === "video") {
-    videoEl.style.display = "block";
-    videoEl.src = room.media_url;
-    if (isHost) videoEl.controls = true;
-    mediaEl = videoEl;
-  } else {
-    audioStage.style.display = "flex";
-    audioEl.src = room.media_url;
-    audioName.textContent = room.media_name || "Now playing";
-    if (isHost) audioEl.controls = true;
-    mediaEl = audioEl;
-  }
-
-  if (isHost) {
-    hostNote.style.display = "block";
-    setupHost();
-  } else {
-    guestLock.style.display = "flex";
-    setupGuest();
-  }
-}
-
-// ── Realtime channel (shared) ──
-const channel = supabase.channel(`room:${code}`, {
-  config: { broadcast: { self: false }, presence: { key: crypto.randomUUID() } },
-});
-
-channel.on("presence", { event: "sync" }, () => {
-  const state = channel.presenceState();
-  const people = Object.values(state).flat();
-  presenceCountEl.textContent = `${people.length} watching`;
-  dotsEl.innerHTML = people
-    .slice(0, 6)
-    .map((p) => `<div class="dot" title="${p.name}">${(p.name || "?")[0]}</div>`)
-    .join("");
-});
-
-// ── HOST ──
-function setupHost() {
-  const send = (action, extra = {}) =>
-    channel.send({
-      type: "broadcast",
-      event: "state",
-      payload: { action, time: mediaEl.currentTime, playing: !mediaEl.paused, ...extra },
-    });
-
-  mediaEl.addEventListener("play", () => {
-    setLive(true);
-    send("play");
-  });
-  mediaEl.addEventListener("pause", () => {
-    setLive(false);
-    send("pause");
-  });
-  mediaEl.addEventListener("seeked", () => send("seek"));
-
-  setInterval(() => {
-    if (mediaEl.src) send("sync");
-  }, 4000);
-
-  channel.on("broadcast", { event: "request-sync" }, () => send("sync"));
-
-  channel.subscribe(async (status) => {
-    if (status === "SUBSCRIBED") {
-      await channel.track({ name: guestName, host: true });
-    }
-  });
-}
-
-// ── GUEST ──
-function setupGuest() {
-  let unlocked = false;
-
-  guestLock.addEventListener("click", async () => {
-    try {
-      await mediaEl.play();
-      mediaEl.pause();
-    } catch (e) {
-      /* ignore — some browsers still allow this after the click */
-    }
-    unlocked = true;
-    guestLock.style.display = "none";
-    channel.send({ type: "broadcast", event: "request-sync", payload: {} });
-  });
-
-  channel.on("broadcast", { event: "state" }, ({ payload }) => {
-    if (!unlocked) return;
-    const drift = Math.abs(mediaEl.currentTime - payload.time);
-
-    if (payload.action === "play") {
-      if (drift > 1) mediaEl.currentTime = payload.time;
-      mediaEl.play().catch(() => {});
-      setLive(true);
-    } else if (payload.action === "pause") {
-      mediaEl.currentTime = payload.time;
-      mediaEl.pause();
-      setLive(false);
-    } else if (payload.action === "seek") {
-      mediaEl.currentTime = payload.time;
-    } else if (payload.action === "sync") {
-      if (drift > 1.5) mediaEl.currentTime = payload.time;
-      if (payload.playing && mediaEl.paused) mediaEl.play().catch(() => {});
-      if (!payload.playing && !mediaEl.paused) mediaEl.pause();
-      setLive(payload.playing);
-    }
-  });
-
-  channel.subscribe(async (status) => {
-    if (status === "SUBSCRIBED") {
-      await channel.track({ name: guestName, host: false });
-    }
-  });
-}
+// ── WebRTC room voice/video chat ──
+function addLocalTracks(pc){callStream?.getTracks().forEach(t=>pc.addTrack(t,callStream))}
+function makePeer(remote){const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});pc.onicecandidate=e=>{if(e.candidate)channel.send({type:"broadcast",event:"signal",payload:{to:remote.id,from:guestId,data:{candidate:e.candidate}}})};pc.ontrack=e=>{let box=document.getElementById(`peer-${remote.id}`);if(!box){box=document.createElement("div");box.id=`peer-${remote.id}`;box.className="call-tile";callGrid.appendChild(box)}let media=box.querySelector("video");if(!media){media=document.createElement("video");media.autoplay=true;media.playsInline=true;box.appendChild(media)}media.srcObject=e.streams[0]};pc.onconnectionstatechange=()=>{if(["failed","closed","disconnected"].includes(pc.connectionState)){pc.close();peers.delete(remote.id);document.getElementById(`peer-${remote.id}`)?.remove()}};addLocalTracks(pc);peers.set(remote.id,pc);return pc}
+async function connectPeer(remote){if(peers.has(remote.id))return;const pc=makePeer(remote);if(guestId<remote.id){const offer=await pc.createOffer();await pc.setLocalDescription(offer);channel.send({type:"broadcast",event:"signal",payload:{to:remote.id,from:guestId,data:{description:pc.localDescription}}})}}
+async function syncPeers(people){for(const p of people)await connectPeer(p);for(const [id,pc] of peers)if(!people.some(p=>p.id===id)){pc.close();peers.delete(id);document.getElementById(`peer-${id}`)?.remove()}}
+channel.on("broadcast",{event:"signal"},async({payload})=>{if(payload.to!==guestId)return;let pc=peers.get(payload.from);if(!pc){pc=makePeer({id:payload.from,name:"Guest"})}const data=payload.data;if(data.description){await pc.setRemoteDescription(data.description);if(data.description.type==="offer"){const answer=await pc.createAnswer();await pc.setLocalDescription(answer);channel.send({type:"broadcast",event:"signal",payload:{to:payload.from,from:guestId,data:{description:pc.localDescription}}})}}else if(data.candidate){try{await pc.addIceCandidate(data.candidate)}catch{}}});
+async function startCall(mode){if(callMode)return;try{callStream=await navigator.mediaDevices.getUserMedia({audio:true,video:mode==="video"});callMode=mode;callStatus.textContent=mode==="video"?"Video call active":"Live voice chat active";voiceBtn.disabled=true;videoCallBtn.disabled=true;hangupBtn.style.display="inline-flex";await channel.track({id:guestId,name:guestName,host:isHost,call:true,mode});const people=Object.values(channel.presenceState()).flat().filter(p=>p.id!==guestId&&p.call);await syncPeers(people)}catch(e){showError(errorBox,"Camera/microphone permission is required for calls.")}}
+function hangup(){callStream?.getTracks().forEach(t=>t.stop());callStream=null;peers.forEach(pc=>pc.close());peers.clear();callGrid.innerHTML="";callMode=null;voiceBtn.disabled=false;videoCallBtn.disabled=false;hangupBtn.style.display="none";callStatus.textContent="";channel.track({id:guestId,name:guestName,host:isHost,call:false})}
+voiceBtn.addEventListener("click",()=>startCall("voice"));videoCallBtn.addEventListener("click",()=>startCall("video"));hangupBtn.addEventListener("click",hangup);
 
 init();

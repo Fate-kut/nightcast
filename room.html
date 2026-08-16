@@ -1,50 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Nightcast — room</title>
-<link rel="stylesheet" href="css/style.css" />
-</head>
-<body>
-<div class="wrap">
-  <div class="container">
-
-    <div class="room-header">
-      <div class="ticket">
-        <div>
-          <div class="label">Room code</div>
-          <div class="code" id="roomCode">——————</div>
-        </div>
-        <button class="btn-ghost" id="copyBtn" style="padding:8px 12px;font-size:12.5px;">Copy link</button>
-      </div>
-
-      <div class="presence">
-        <span class="tally" id="tally"><span class="led"></span><span id="tallyText">idle</span></span>
-        <div class="dots" id="dots"></div>
-        <span id="presenceCount">1 watching</span>
-      </div>
-    </div>
-
-    <div class="stage" id="stage" style="display:none;">
-      <video id="videoEl" playsinline style="display:none;"></video>
-      <div class="audio-stage" id="audioStage" style="display:none;">
-        <div class="vinyl" id="vinyl"></div>
-        <div class="audio-name" id="audioName"></div>
-        <audio id="audioEl"></audio>
-      </div>
-      <div class="guest-lock" id="guestLock" style="display:none;">
-        <div class="tag" style="font-family:'Space Grotesk',sans-serif;font-size:20px;">Tap to join the room</div>
-        <button class="btn-amber">Sync me in</button>
-      </div>
-    </div>
-
-    <div class="error-box" id="errorBox"></div>
-    <p class="guest-note" id="hostNote" style="display:none;">You're hosting — play, pause and seek normally. Everyone else follows you.</p>
-    <a href="index.html" class="top-link">← back to Nightcast</a>
-  </div>
-</div>
-
-<script type="module" src="js/room.js"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nightcast</title><link rel="stylesheet" href="css/style.css"></head>
+<body><div class="wrap"><div class="container">
+  <div class="room-header"><div class="ticket"><div><div class="label">Room</div><div class="code" id="roomCode">——————</div></div><div><div class="room-title" id="roomName">Nightcast Room</div></div></div><div class="header-actions"><button class="btn-ghost" id="inviteBtn">Invite friends</button><button class="btn-ghost" id="editRoomBtn" style="display:none">Edit room</button><button class="btn-ghost danger" id="deleteRoomBtn" style="display:none">Delete room</button></div></div>
+  <div class="presence"><span class="tally" id="tally"><span class="led"></span><span id="tallyText">idle</span></span><div class="dots" id="dots"></div><span id="presenceCount">1 here</span></div>
+  <div class="stage" id="stage" style="display:none"><video id="videoEl" playsinline style="display:none"></video><div class="audio-stage" id="audioStage" style="display:none"><div class="vinyl" id="vinyl"></div><div class="audio-name" id="audioName"></div><audio id="audioEl"></audio></div><div class="guest-lock" id="guestLock" style="display:none"><div class="tag">Tap to join the room</div><button class="btn-amber">Sync me in</button></div></div>
+  <p class="guest-note" id="hostNote" style="display:none">You're hosting — playback controls are synced to everyone.</p>
+  <div class="call-card"><div class="section-head"><div><h2>Live chat & calls</h2><p>Talk with everyone currently in the room.</p></div><div class="call-actions"><button class="btn-ghost" id="voiceBtn">🎙 Live voice chat</button><button class="btn-ghost" id="videoCallBtn">📹 Video call</button><button class="btn-ghost danger" id="hangupBtn" style="display:none">Leave call</button></div></div><div id="callStatus" class="call-status"></div><div id="callGrid" class="call-grid"></div></div>
+  <div class="chat-card"><div class="section-head"><div><h2>Messages</h2><p>Text chat and voice messages stay in this room.</p></div></div><div id="messageList" class="message-list"></div><div class="composer"><input id="messageInput" type="text" maxlength="2000" placeholder="Write a message…"><button class="btn-ghost" id="recordBtn">🎤 Voice</button><button class="btn-amber" id="sendBtn">Send</button></div><div id="voiceStatus" class="voice-status"></div></div>
+  <div class="error-box" id="errorBox"></div><a href="index.html" class="top-link">← back to Nightcast</a>
+</div></div><script type="module" src="js/room.js"></script></body></html>
