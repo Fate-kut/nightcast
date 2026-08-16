@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nightcast — room</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <div class="container">
+
+    <div class="room-header">
+      <div class="ticket">
+        <div>
+          <div class="label">Room code</div>
+          <div class="code" id="roomCode">——————</div>
+        </div>
+        <button class="btn-ghost" id="copyBtn" style="padding:8px 12px;font-size:12.5px;">Copy link</button>
+      </div>
+
+      <div class="presence">
+        <span class="tally" id="tally"><span class="led"></span><span id="tallyText">idle</span></span>
+        <div class="dots" id="dots"></div>
+        <span id="presenceCount">1 watching</span>
+      </div>
+    </div>
+
+    <div class="stage" id="stage" style="display:none;">
+      <video id="videoEl" playsinline style="display:none;"></video>
+      <div class="audio-stage" id="audioStage" style="display:none;">
+        <div class="vinyl" id="vinyl"></div>
+        <div class="audio-name" id="audioName"></div>
+        <audio id="audioEl"></audio>
+      </div>
+      <div class="guest-lock" id="guestLock" style="display:none;">
+        <div class="tag" style="font-family:'Space Grotesk',sans-serif;font-size:20px;">Tap to join the room</div>
+        <button class="btn-amber">Sync me in</button>
+      </div>
+    </div>
+
+    <div class="error-box" id="errorBox"></div>
+    <p class="guest-note" id="hostNote" style="display:none;">You're hosting — play, pause and seek normally. Everyone else follows you.</p>
+    <a href="index.html" class="top-link">← back to Nightcast</a>
+  </div>
+</div>
+
+<script type="module" src="js/room.js"></script>
+</body>
+</html>
