@@ -1,6 +1,11 @@
 import { supabase, isConfigured, SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabaseClient.js";
 import { generateCode, showError, hideError, mediaKind } from "./util.js";
-import { Upload } from "https://esm.sh/tus-js-client@4.1.0";
+
+const Upload = window.tus?.Upload;
+
+if (!Upload) {
+  throw new Error("Nightcast upload client failed to load. Please refresh the page.");
+}
 
 if (!isConfigured) {
   showError(
@@ -59,11 +64,9 @@ function selectFile(file) {
 }
 
 // ── create room ──
-// Uses Supabase's resumable (TUS) upload endpoint instead of the plain
-// storage.upload() call — the plain endpoint buffers the whole request and
-// rejects anything past a few dozen MB, which is why video files were
-// failing. Resumable uploads are chunked, support files up to several GB,
-// retry automatically, and give real progress.
+// Uses Supabase's resumable (TUS) upload endpoint. The browser UMD build of
+// tus-js-client is loaded by index.html so the Upload constructor receives a
+// browser File instead of being routed through the Node Buffer/Readable path.
 createBtn.addEventListener("click", () => {
   if (!selectedFile) return;
   if (!isConfigured) {
@@ -81,10 +84,13 @@ createBtn.addEventListener("click", () => {
   const ext = (selectedFile.name.split(".").pop() || "bin").toLowerCase();
   const path = `${code}.${ext}`;
 
+  // Supabase recommends the direct storage hostname for large resumable uploads.
+  const storageUrl = SUPABASE_URL.replace(".supabase.co", ".storage.supabase.co");
+
   const upload = new Upload(selectedFile, {
-    endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+    endpoint: `${storageUrl}/storage/v1/upload/resumable`,
     retryDelays: [0, 3000, 5000, 10000, 20000],
-    chunkSize: 6 * 1024 * 1024, // Supabase's TUS implementation requires exactly 6MB chunks
+    chunkSize: 6 * 1024 * 1024,
     uploadDataDuringCreation: true,
     removeFingerprintOnSuccess: true,
     headers: {
