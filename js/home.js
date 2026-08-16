@@ -1,6 +1,9 @@
 import { supabase, isConfigured, SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabaseClient.js";
 import { generateCode, showError, hideError, mediaKind } from "./util.js";
-import { Upload } from "https://esm.sh/tus-js-client@4.1.0";
+// Use the browser ESM build. The generic esm.sh entry can resolve to a Node-oriented
+// implementation, which rejects browser File objects with "source object may only be
+// an instance of Buffer or Readable in this environment".
+import { Upload } from "https://cdn.jsdelivr.net/npm/tus-js-client@4.1.0/+esm";
 
 if (!isConfigured) {
   showError(
@@ -17,13 +20,11 @@ const createBtn = document.getElementById("createBtn");
 const progressWrap = document.getElementById("progressWrap");
 const progressBar = document.getElementById("progressBar");
 const errorBox = document.getElementById("errorBox");
-
 const codeInput = document.getElementById("codeInput");
 const joinBtn = document.getElementById("joinBtn");
 
 let selectedFile = null;
 
-// ── file selection ──
 fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) selectFile(fileInput.files[0]);
 });
@@ -58,12 +59,6 @@ function selectFile(file) {
   createBtn.disabled = false;
 }
 
-// ── create room ──
-// Uses Supabase's resumable (TUS) upload endpoint instead of the plain
-// storage.upload() call — the plain endpoint buffers the whole request and
-// rejects anything past a few dozen MB, which is why video files were
-// failing. Resumable uploads are chunked, support files up to several GB,
-// retry automatically, and give real progress.
 createBtn.addEventListener("click", () => {
   if (!selectedFile) return;
   if (!isConfigured) {
@@ -84,7 +79,7 @@ createBtn.addEventListener("click", () => {
   const upload = new Upload(selectedFile, {
     endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
     retryDelays: [0, 3000, 5000, 10000, 20000],
-    chunkSize: 6 * 1024 * 1024, // Supabase's TUS implementation requires exactly 6MB chunks
+    chunkSize: 6 * 1024 * 1024,
     uploadDataDuringCreation: true,
     removeFingerprintOnSuccess: true,
     headers: {
@@ -99,16 +94,16 @@ createBtn.addEventListener("click", () => {
       cacheControl: "3600",
     },
     onError: (err) => {
-      console.error(err);
+      console.error("Nightcast upload error:", err);
       showError(
         errorBox,
-        `Upload failed: ${err.message || err}. Check that the "media" bucket exists, is set to Public, and its file size limit is big enough for this file (Storage → media → Edit bucket).`
+        `Upload failed: ${err.message || err}. Check that the "media" bucket exists, is public, and its file size limit allows this file.`
       );
       resetCreateButton();
     },
     onProgress: (sent, total) => {
-      const pct = Math.round((sent / total) * 100);
-      progressBar.style.width = pct + "%";
+      const pct = total ? Math.round((sent / total) * 100) : 0;
+      progressBar.style.width = `${pct}%`;
       createBtn.textContent = `Uploading… ${pct}%`;
     },
     onSuccess: async () => {
@@ -135,10 +130,16 @@ createBtn.addEventListener("click", () => {
     },
   });
 
-  upload.findPreviousUploads().then((previous) => {
-    if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
-    upload.start();
-  });
+  upload.findPreviousUploads()
+    .then((previous) => {
+      if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
+      upload.start();
+    })
+    .catch((err) => {
+      console.error("Could not start resumable upload:", err);
+      showError(errorBox, `Could not start upload: ${err.message || err}`);
+      resetCreateButton();
+    });
 });
 
 function resetCreateButton() {
@@ -147,7 +148,6 @@ function resetCreateButton() {
   progressWrap.style.display = "none";
 }
 
-// ── join room ──
 codeInput.addEventListener("input", () => {
   codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 });
