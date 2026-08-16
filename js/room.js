@@ -22,9 +22,9 @@ const hostNote = document.getElementById("hostNote");
 
 roomCodeEl.textContent = code || "——————";
 
-if (!code || !/^[A-Z0-9]{6}$/.test(code)) {
-  showError(errorBox, "Invalid room code. Open the room link again or enter a valid 6-character code.");
-  throw new Error("invalid room code");
+if (!code) {
+  showError(errorBox, "No room code in the link.");
+  throw new Error("missing code");
 }
 
 if (!isConfigured) {
@@ -36,38 +36,17 @@ const isHost = localStorage.getItem(`nightcast_host_${code}`) === "1";
 const guestName = "Guest " + Math.floor(100 + Math.random() * 900);
 
 copyBtn.addEventListener("click", async () => {
-  try {
-    if (!navigator.clipboard) throw new Error("Clipboard API unavailable");
-    await navigator.clipboard.writeText(window.location.href);
-    copyBtn.textContent = "Copied!";
-    setTimeout(() => (copyBtn.textContent = "Copy link"), 1500);
-  } catch (err) {
-    console.error(err);
-    showError(errorBox, "Couldn't copy the link automatically. Copy the URL from your browser's address bar instead.");
-  }
+  await navigator.clipboard.writeText(window.location.href);
+  copyBtn.textContent = "Copied!";
+  setTimeout(() => (copyBtn.textContent = "Copy link"), 1500);
 });
 
-let mediaEl = null;
-let channelStarted = false;
-let syncTimer = null;
+let mediaEl = null; // whichever element is active
 
 function setLive(isPlaying) {
   tally.classList.toggle("live", isPlaying);
   tallyText.textContent = isPlaying ? "playing" : "paused";
   vinyl.classList.toggle("spin", isPlaying);
-}
-
-function startChannel() {
-  if (channelStarted) return;
-  channelStarted = true;
-
-  channel.subscribe(async (status) => {
-    if (status === "SUBSCRIBED") {
-      await channel.track({ name: guestName, host: isHost });
-    } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-      showError(errorBox, "Realtime connection failed. Refresh the page and try again.");
-    }
-  });
 }
 
 async function init() {
@@ -77,19 +56,8 @@ async function init() {
     .eq("code", code)
     .maybeSingle();
 
-  if (error) {
-    console.error(error);
-    showError(errorBox, `Couldn't load this room: ${error.message || "Supabase request failed."}`);
-    return;
-  }
-
-  if (!room) {
+  if (error || !room) {
     showError(errorBox, "This room doesn't exist — check the code or ask your friend for a fresh link.");
-    return;
-  }
-
-  if (room.media_type !== "video" && room.media_type !== "audio") {
-    showError(errorBox, "This room contains an unsupported media type.");
     return;
   }
 
@@ -98,15 +66,13 @@ async function init() {
   if (room.media_type === "video") {
     videoEl.style.display = "block";
     videoEl.src = room.media_url;
-    videoEl.load();
-    videoEl.controls = isHost;
+    if (isHost) videoEl.controls = true;
     mediaEl = videoEl;
   } else {
     audioStage.style.display = "flex";
     audioEl.src = room.media_url;
-    audioEl.load();
     audioName.textContent = room.media_name || "Now playing";
-    audioEl.controls = isHost;
+    if (isHost) audioEl.controls = true;
     mediaEl = audioEl;
   }
 
@@ -117,15 +83,11 @@ async function init() {
     guestLock.style.display = "flex";
     setupGuest();
   }
-
-  startChannel();
 }
 
+// ── Realtime channel (shared) ──
 const channel = supabase.channel(`room:${code}`, {
-  config: {
-    broadcast: { self: false },
-    presence: { key: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}` },
-  },
+  config: { broadcast: { self: false }, presence: { key: crypto.randomUUID() } },
 });
 
 channel.on("presence", { event: "sync" }, () => {
@@ -134,32 +96,18 @@ channel.on("presence", { event: "sync" }, () => {
   presenceCountEl.textContent = `${people.length} watching`;
   dotsEl.innerHTML = people
     .slice(0, 6)
-    .map((p) => {
-      const name = String(p.name || "?").replace(/[&<>\"]/g, (char) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-      }[char]));
-      return `<div class="dot" title="${name}">${name[0]}</div>`;
-    })
+    .map((p) => `<div class="dot" title="${p.name}">${(p.name || "?")[0]}</div>`)
     .join("");
 });
 
+// ── HOST ──
 function setupHost() {
-  const send = (action, extra = {}) => {
-    if (!mediaEl) return;
+  const send = (action, extra = {}) =>
     channel.send({
       type: "broadcast",
       event: "state",
-      payload: {
-        action,
-        time: Number.isFinite(mediaEl.currentTime) ? mediaEl.currentTime : 0,
-        playing: !mediaEl.paused,
-        ...extra,
-      },
+      payload: { action, time: mediaEl.currentTime, playing: !mediaEl.paused, ...extra },
     });
-  };
 
   mediaEl.addEventListener("play", () => {
     setLive(true);
@@ -171,11 +119,20 @@ function setupHost() {
   });
   mediaEl.addEventListener("seeked", () => send("seek"));
 
-  syncTimer = setInterval(() => send("sync"), 4000);
+  setInterval(() => {
+    if (mediaEl.src) send("sync");
+  }, 4000);
 
   channel.on("broadcast", { event: "request-sync" }, () => send("sync"));
+
+  channel.subscribe(async (status) => {
+    if (status === "SUBSCRIBED") {
+      await channel.track({ name: guestName, host: true });
+    }
+  });
 }
 
+// ── GUEST ──
 function setupGuest() {
   let unlocked = false;
 
@@ -183,8 +140,8 @@ function setupGuest() {
     try {
       await mediaEl.play();
       mediaEl.pause();
-    } catch (err) {
-      console.debug("Media unlock attempt failed; continuing after user gesture.", err);
+    } catch (e) {
+      /* ignore — some browsers still allow this after the click */
     }
     unlocked = true;
     guestLock.style.display = "none";
@@ -192,8 +149,7 @@ function setupGuest() {
   });
 
   channel.on("broadcast", { event: "state" }, ({ payload }) => {
-    if (!unlocked || !payload || !Number.isFinite(payload.time)) return;
-
+    if (!unlocked) return;
     const drift = Math.abs(mediaEl.currentTime - payload.time);
 
     if (payload.action === "play") {
@@ -210,15 +166,15 @@ function setupGuest() {
       if (drift > 1.5) mediaEl.currentTime = payload.time;
       if (payload.playing && mediaEl.paused) mediaEl.play().catch(() => {});
       if (!payload.playing && !mediaEl.paused) mediaEl.pause();
-      setLive(Boolean(payload.playing));
+      setLive(payload.playing);
+    }
+  });
+
+  channel.subscribe(async (status) => {
+    if (status === "SUBSCRIBED") {
+      await channel.track({ name: guestName, host: false });
     }
   });
 }
-
-window.addEventListener("pagehide", () => {
-  if (syncTimer) clearInterval(syncTimer);
-  channel.untrack().catch(() => {});
-  supabase.removeChannel(channel).catch(() => {});
-});
 
 init();
