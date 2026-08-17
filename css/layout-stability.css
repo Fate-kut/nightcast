@@ -1,0 +1,63 @@
+/* Nightcast layout stability + smooth scrolling layer */
+html { scroll-behavior: smooth; scroll-padding-top: 18px; scrollbar-gutter: stable; }
+body { overflow-x: clip; overscroll-behavior-x: none; -webkit-overflow-scrolling: touch; }
+*, *::before, *::after { min-width: 0; }
+img, video, audio, iframe, canvas, svg { max-width: 100%; }
+button, input, textarea, select { max-width: 100%; }
+p, h1, h2, h3, span, strong, a { overflow-wrap: anywhere; }
+main > *, .hero > *, .grid > *, .room-feature-grid > *, .section-head > *, .action-heading > *, .room-row > *, .stage-toolbar > *, .header-actions > *, .room-tools > * { min-width: 0; }
+.hero, .feature-strip, .grid, .room-feature-grid, .room-header, .section-head, .action-heading, .room-row, .stage-toolbar, .composer, .call-grid { contain: layout; }
+.card, .call-card, .chat-card, .rooms-card, .stage, .feature-strip { isolation: isolate; }
+section, .card, .call-card, .chat-card, .stage-shell { scroll-margin-top: 18px; }
+.action-heading > div:last-child, .section-head > div:first-child, .room-info, .room-heading, .stage-toolbar > div, .call-actions, .header-actions, .room-tools { min-width: 0; }
+.action-heading h2, .section-head h2, .room-title, .hint, .section-head p { max-width: 100%; }
+.room-row { flex-wrap: wrap; }
+.room-row .room-info { flex: 1 1 180px; }
+.room-row .row-actions { flex: 0 1 auto; }
+.filename, .audio-name, .message-body, .room-title, .room-row strong, .room-row span { overflow-wrap: anywhere; word-break: break-word; }
+
+@media (max-width: 800px) {
+  .container, .room-container { width: 100%; max-width: 100%; }
+  .hero-copy, .hero-art { width: 100%; }
+  .feature-item { min-width: 0; }
+  .action-heading { gap: 12px; }
+  .action-heading .icon-badge { flex: 0 0 50px; }
+  .rooms-head, .section-head, .room-header { width: 100%; }
+  .room-tools, .filter-pills, .header-actions, .call-actions { width: 100%; }
+  .room-tools { align-items: stretch; }
+  .room-search { min-width: 0; flex: 1 1 100%; }
+  .filter-pills > * { min-width: 0; }
+  .ticket { max-width: 100%; flex-wrap: wrap; }
+  .room-header .header-actions button, .call-actions button { flex: 1 1 120px; min-width: 0; }
+  .stage-toolbar { flex-wrap: wrap; }
+  .stage-toolbar > div { flex: 1 1 180px; }
+  .stage-toolbar > button { flex: 0 1 auto; }
+  .room-feature-grid, .composer { min-width: 0; }
+  .composer input { min-width: 0; }
+}
+
+@media (max-width: 600px) {
+  .container, .room-container { padding-left: 14px; padding-right: 14px; }
+  .hero-actions { width: 100%; }
+  .hero-actions > button { flex: 1 1 140px; }
+  .action-heading { align-items: flex-start; }
+  .action-heading .icon-badge { flex: 0 0 44px; width: 44px; height: 44px; }
+  .room-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px; }
+  .room-row .room-info { grid-column: 1 / -1; width: 100%; }
+  .room-row .room-thumb { grid-column: 1; grid-row: 2; }
+  .room-row .row-actions { grid-column: 1 / -1; width: 100%; justify-content: flex-start; }
+  .room-row .row-actions > * { flex: 0 1 auto; }
+  .ticket { width: 100%; gap: 12px; }
+  .ticket > div { min-width: 0; flex: 1 1 140px; }
+  .presence { width: 100%; }
+  .stage { border-radius: 14px; }
+  .stage video { max-height: 60vh; height: auto; }
+  .audio-stage { padding: 38px 16px; }
+  .vinyl { width: min(170px, 55vw); height: min(170px, 55vw); }
+  .message-list { height: min(300px, 48vh); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
