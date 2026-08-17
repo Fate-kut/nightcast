@@ -77,14 +77,14 @@
       const stageBtn = document.getElementById("stageTheaterBtn");
       const roomCode = document.getElementById("roomCode");
       const stageShell = document.getElementById("stageShell");
-      const stage = document.getElementById("stage");
       const fab = document.getElementById("roomFab");
       const menu = document.getElementById("roomQuickMenu");
 
-      async function enterFullscreen() {
+      async function toggleFullscreen() {
         try {
           if (!document.fullscreenElement) {
-            await (stage || document.documentElement).requestFullscreen();
+            if (!document.documentElement.requestFullscreen) throw new Error("Fullscreen API unavailable");
+            await document.documentElement.requestFullscreen();
           } else {
             await document.exitFullscreen();
           }
@@ -97,6 +97,11 @@
         const active = !!document.fullscreenElement;
         const item = menu?.querySelector('[data-room-action="fullscreen"] span');
         if (item) item.textContent = active ? "Exit fullscreen" : "Fullscreen theater";
+        if (active) {
+          body.classList.add("theater-mode");
+          theaterBtn.textContent = "Exit theater";
+          stageBtn.textContent = "Collapse player";
+        }
       }
 
       function setTheater(on, fullscreen = false) {
@@ -104,15 +109,23 @@
         theaterBtn.textContent = on ? "Exit theater" : "Theater mode";
         stageBtn.textContent = on ? "Collapse player" : "Expand player";
         if (on) stageShell?.scrollIntoView({ behavior: "smooth", block: "center" });
-        if (fullscreen) enterFullscreen();
+        if (fullscreen) toggleFullscreen();
       }
 
       theaterBtn?.addEventListener("click", () => setTheater(!body.classList.contains("theater-mode")));
       stageBtn?.addEventListener("click", () => setTheater(!body.classList.contains("theater-mode")));
-      document.addEventListener("fullscreenchange", updateFullscreenLabels);
+      document.addEventListener("fullscreenchange", () => {
+        const active = !!document.fullscreenElement;
+        updateFullscreenLabels();
+        if (!active && body.classList.contains("theater-mode")) {
+          body.classList.remove("theater-mode");
+          theaterBtn.textContent = "Theater mode";
+          stageBtn.textContent = "Expand player";
+        }
+      });
 
       fab?.addEventListener("click", () => {
-        const open = !fab.getAttribute("aria-expanded") || fab.getAttribute("aria-expanded") === "false";
+        const open = fab.getAttribute("aria-expanded") !== "true";
         fab.setAttribute("aria-expanded", String(open));
         fab.classList.toggle("open", open);
         menu?.classList.toggle("open", open);
@@ -137,8 +150,8 @@
         }
         fab?.setAttribute("aria-expanded", "false");
         fab?.classList.remove("open");
-        menu.classList.remove("open");
-        menu.setAttribute("aria-hidden", "true");
+        menu?.classList.remove("open");
+        menu?.setAttribute("aria-hidden", "true");
       });
 
       roomCode?.addEventListener("click", async () => {
