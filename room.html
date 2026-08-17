@@ -57,5 +57,36 @@
     </div>
   </div>
   <script type="module" src="js/room.js"></script>
+  <script>
+    (() => {
+      const body = document.body;
+      const theaterBtn = document.getElementById("theaterBtn");
+      const stageBtn = document.getElementById("stageTheaterBtn");
+      const roomCode = document.getElementById("roomCode");
+      const stageShell = document.getElementById("stageShell");
+
+      function setTheater(on) {
+        body.classList.toggle("theater-mode", on);
+        theaterBtn.textContent = on ? "Exit theater" : "Theater mode";
+        stageBtn.textContent = on ? "Collapse player" : "Expand player";
+        if (on) stageShell?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      theaterBtn?.addEventListener("click", () => setTheater(!body.classList.contains("theater-mode")));
+      stageBtn?.addEventListener("click", () => setTheater(!body.classList.contains("theater-mode")));
+
+      roomCode?.addEventListener("click", async () => {
+        const code = roomCode.textContent.trim();
+        if (!code || code.includes("—")) return;
+        try {
+          await navigator.clipboard.writeText(code);
+          roomCode.title = "Copied!";
+          setTimeout(() => { roomCode.title = "Copy room code"; }, 1200);
+        } catch {
+          prompt("Copy room code:", code);
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
