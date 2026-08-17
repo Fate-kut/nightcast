@@ -1,1 +1,84 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#063d91"><title>Nightcast — watch together</title><link rel="stylesheet" href="css/style.css"></head><body><div class="wrap"><div class="container"><header class="marquee"><p class="mark">NIGHT<span>CAST</span></p><p class="tag">Watch, listen, message and call together.</p></header><main><div class="grid"><section class="card action-card"><div class="icon-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div><div><h1>Start a room</h1><p class="hint">Upload a video or audio file, name the room, then invite your friends.</p></div><input type="text" id="roomNameInput" placeholder="ROOM NAME" maxlength="80" aria-label="Room name"><label class="dropzone" id="dropzone"><input type="file" id="fileInput" accept="video/*,audio/*" hidden><span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span><span id="dzText"><strong>Choose a file</strong><br>or drag one here — video or audio</span></label><div class="filename" id="fileName" style="display:none"></div><div class="progress" id="progressWrap" style="display:none"><div id="progressBar"></div></div><button class="btn-primary" id="createBtn" disabled>Create room</button></section><section class="card action-card"><div class="icon-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div><div><h2>Join a room</h2><p class="hint">Enter the code your friend sent you.</p></div><input type="text" id="codeInput" placeholder="ROOM CODE" maxlength="12" aria-label="Room code"><button class="btn-secondary" id="joinBtn">Join room</button></section></div><section class="card rooms-card"><div class="section-head"><div><h2>Your rooms</h2><p class="hint">Rooms you created on this device.</p></div></div><div id="roomsList"></div></section><div class="error-box" id="errorBox"></div></main></div></div><script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.1.0/dist/tus.min.js"></script><script type="module" src="js/home.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#063d91">
+  <meta name="description" content="Nightcast — watch, listen and chat together.">
+  <title>Nightcast — watch together</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="wrap">
+    <div class="container">
+      <header class="site-header">
+        <a class="brand" href="index.html" aria-label="Nightcast home">NIGHT<span>CAST</span></a>
+        <div class="header-status"><span class="status-dot"></span> Watch together</div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="hero-copy">
+            <span class="eyebrow">YOUR PRIVATE WATCH SPACE</span>
+            <h1>Watch together.<br><span>Stay connected.</span></h1>
+            <p>Upload a video or audio file, create a room, and invite your friends. Playback stays synchronized while chat and calls keep everyone together.</p>
+            <div class="hero-actions">
+              <button class="btn-primary" id="heroCreateBtn">Create a room</button>
+              <button class="btn-ghost" id="heroJoinBtn">Join with code</button>
+            </div>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="hero-orbit orbit-one"></div>
+            <div class="hero-orbit orbit-two"></div>
+            <div class="hero-screen"><div class="screen-play">▶</div><div class="screen-line"></div><div class="screen-line short"></div></div>
+            <div class="hero-glow"></div>
+          </div>
+        </section>
+
+        <section class="feature-strip" aria-label="Nightcast features">
+          <div class="feature-item"><span class="feature-icon">↔</span><div><strong>Synced playback</strong><span>Everyone stays together</span></div></div>
+          <div class="feature-item"><span class="feature-icon">◎</span><div><strong>Live presence</strong><span>See who's in the room</span></div></div>
+          <div class="feature-item"><span class="feature-icon">◉</span><div><strong>Chat & calls</strong><span>Talk while you watch</span></div></div>
+        </section>
+
+        <div class="section-kicker">GET STARTED</div>
+        <div class="grid" id="actionsGrid">
+          <section class="card action-card" id="createSection">
+            <div class="action-heading"><div class="icon-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div><div><h2>Start a room</h2><p class="hint">Upload media and create your private watch room.</p></div></div>
+            <input type="text" id="roomNameInput" placeholder="ROOM NAME" maxlength="80" aria-label="Room name">
+            <label class="dropzone" id="dropzone">
+              <input type="file" id="fileInput" accept="video/*,audio/*" hidden>
+              <span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span>
+              <span id="dzText"><strong>Choose a file</strong><br>or drag one here — video or audio</span>
+            </label>
+            <div class="filename" id="fileName" style="display:none"></div>
+            <div class="progress" id="progressWrap" style="display:none"><div id="progressBar"></div></div>
+            <button class="btn-primary" id="createBtn" disabled>Create room</button>
+          </section>
+
+          <section class="card action-card" id="joinSection">
+            <div class="action-heading"><div class="icon-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div><div><h2>Join a room</h2><p class="hint">Enter the code your friend sent you.</p></div></div>
+            <div class="join-preview"><span class="join-label">ROOM CODE</span><span class="join-symbol">#</span></div>
+            <input type="text" id="codeInput" placeholder="ROOM CODE" maxlength="12" aria-label="Room code" autocomplete="off">
+            <button class="btn-secondary" id="joinBtn">Join room</button>
+          </section>
+        </div>
+
+        <section class="card rooms-card" id="roomsSection">
+          <div class="section-head rooms-head">
+            <div><div class="section-kicker">LIBRARY</div><h2>Your rooms</h2><p class="hint">Recent rooms you created on this device.</p></div>
+            <div class="room-tools"><input id="roomSearch" class="room-search" type="text" placeholder="Search rooms…" aria-label="Search rooms"><div class="filter-pills" role="group" aria-label="Room type"><button class="filter-pill active" data-filter="all">All</button><button class="filter-pill" data-filter="video">Video</button><button class="filter-pill" data-filter="audio">Audio</button></div></div>
+          </div>
+          <div id="roomsList"></div>
+        </section>
+
+        <div class="error-box" id="errorBox"></div>
+        <footer class="footnote">Nightcast keeps your rooms and media connected to your configured Supabase project.</footer>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.1.0/dist/tus.min.js"></script>
+  <script type="module" src="js/home.js"></script>
+</body>
+</html>
