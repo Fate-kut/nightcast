@@ -47,9 +47,9 @@
 
         <p class="guest-note host-note" id="hostNote" style="display:none">You're hosting — playback controls are synced to everyone in this room.</p>
 
-        <section class="room-feature-grid">
-          <div class="call-card"><div class="section-head"><div><span class="section-kicker">LIVE</span><h2>Calls</h2><p>Talk with everyone currently in the room.</p></div><div class="call-actions"><button class="btn-ghost" id="voiceBtn">🎙 Voice</button><button class="btn-ghost" id="videoCallBtn">📹 Video</button><button class="btn-ghost danger" id="hangupBtn" style="display:none">Leave</button></div></div><div id="callStatus" class="call-status"></div><div id="callGrid" class="call-grid"></div></div>
-          <div class="chat-card"><div class="section-head"><div><span class="section-kicker">ROOM CHAT</span><h2>Messages</h2><p>Text and voice messages stay in this room.</p></div></div><div id="messageList" class="message-list"></div><div class="composer"><input id="messageInput" type="text" maxlength="2000" placeholder="Write a message…"><button class="btn-ghost" id="recordBtn">🎤 Voice</button><button class="btn-amber" id="sendBtn">Send</button></div><div id="voiceStatus" class="voice-status"></div></div>
+        <section class="room-feature-grid" id="roomFeatures">
+          <div class="call-card" id="callCard"><div class="section-head"><div><span class="section-kicker">LIVE</span><h2>Calls</h2><p>Talk with everyone currently in the room.</p></div><div class="call-actions"><button class="btn-ghost" id="voiceBtn">🎙 Voice</button><button class="btn-ghost" id="videoCallBtn">📹 Video</button><button class="btn-ghost danger" id="hangupBtn" style="display:none">Leave</button></div></div><div id="callStatus" class="call-status"></div><div id="callGrid" class="call-grid"></div></div>
+          <div class="chat-card" id="chatCard"><div class="section-head"><div><span class="section-kicker">ROOM CHAT</span><h2>Messages</h2><p>Text and voice messages stay in this room.</p></div></div><div id="messageList" class="message-list"></div><div class="composer"><input id="messageInput" type="text" maxlength="2000" placeholder="Write a message…"><button class="btn-ghost" id="recordBtn">🎤 Voice</button><button class="btn-amber" id="sendBtn">Send</button></div><div id="voiceStatus" class="voice-status"></div></div>
         </section>
 
         <div class="error-box" id="errorBox"></div>
@@ -57,6 +57,18 @@
       </main>
     </div>
   </div>
+
+  <div class="room-fab-wrap" id="roomFabWrap">
+    <button class="room-fab" id="roomFab" aria-expanded="false" aria-controls="roomQuickMenu" title="Room controls">☰</button>
+    <div class="room-quick-menu" id="roomQuickMenu" aria-hidden="true">
+      <button type="button" data-room-action="chat">💬 <span>Chat</span></button>
+      <button type="button" data-room-action="voice">🎙 <span>Voice call</span></button>
+      <button type="button" data-room-action="video">📹 <span>Video call</span></button>
+      <button type="button" data-room-action="messages-voice">🎤 <span>Voice message</span></button>
+      <button type="button" data-room-action="fullscreen">⛶ <span>Fullscreen theater</span></button>
+    </div>
+  </div>
+
   <script type="module" src="js/room.js"></script>
   <script>
     (() => {
@@ -65,16 +77,69 @@
       const stageBtn = document.getElementById("stageTheaterBtn");
       const roomCode = document.getElementById("roomCode");
       const stageShell = document.getElementById("stageShell");
+      const stage = document.getElementById("stage");
+      const fab = document.getElementById("roomFab");
+      const menu = document.getElementById("roomQuickMenu");
 
-      function setTheater(on) {
+      async function enterFullscreen() {
+        try {
+          if (!document.fullscreenElement) {
+            await (stage || document.documentElement).requestFullscreen();
+          } else {
+            await document.exitFullscreen();
+          }
+        } catch (error) {
+          console.warn("Fullscreen unavailable:", error);
+        }
+      }
+
+      function updateFullscreenLabels() {
+        const active = !!document.fullscreenElement;
+        const item = menu?.querySelector('[data-room-action="fullscreen"] span');
+        if (item) item.textContent = active ? "Exit fullscreen" : "Fullscreen theater";
+      }
+
+      function setTheater(on, fullscreen = false) {
         body.classList.toggle("theater-mode", on);
         theaterBtn.textContent = on ? "Exit theater" : "Theater mode";
         stageBtn.textContent = on ? "Collapse player" : "Expand player";
         if (on) stageShell?.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (fullscreen) enterFullscreen();
       }
 
       theaterBtn?.addEventListener("click", () => setTheater(!body.classList.contains("theater-mode")));
       stageBtn?.addEventListener("click", () => setTheater(!body.classList.contains("theater-mode")));
+      document.addEventListener("fullscreenchange", updateFullscreenLabels);
+
+      fab?.addEventListener("click", () => {
+        const open = !fab.getAttribute("aria-expanded") || fab.getAttribute("aria-expanded") === "false";
+        fab.setAttribute("aria-expanded", String(open));
+        fab.classList.toggle("open", open);
+        menu?.classList.toggle("open", open);
+        menu?.setAttribute("aria-hidden", String(!open));
+      });
+
+      menu?.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-room-action]");
+        if (!button) return;
+        const action = button.dataset.roomAction;
+        if (action === "chat") {
+          document.getElementById("chatCard")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          document.getElementById("messageInput")?.focus({ preventScroll: true });
+        } else if (action === "voice") {
+          document.getElementById("voiceBtn")?.click();
+        } else if (action === "video") {
+          document.getElementById("videoCallBtn")?.click();
+        } else if (action === "messages-voice") {
+          document.getElementById("recordBtn")?.click();
+        } else if (action === "fullscreen") {
+          setTheater(true, true);
+        }
+        fab?.setAttribute("aria-expanded", "false");
+        fab?.classList.remove("open");
+        menu.classList.remove("open");
+        menu.setAttribute("aria-hidden", "true");
+      });
 
       roomCode?.addEventListener("click", async () => {
         const code = roomCode.textContent.trim();
